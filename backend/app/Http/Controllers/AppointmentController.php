@@ -21,7 +21,13 @@ class AppointmentController extends Controller
     public function indexByUser()
     {
         $user = auth()->user();
-        $appointments = DB::table('appointments')->where('user_id', $user->id)->get();
+        $appointments = Appointment::where('user_id', $user->id)
+            ->union(
+                Appointment::join('attendees', 'attendees.appointment_id', '=', 'appointments.id')
+                    ->where('attendees.user_id', $user->id)
+                    ->select('appointments.*')
+            )
+            ->get();
         return response()->json([
             'appointments' => $appointments
         ]);
@@ -35,6 +41,17 @@ class AppointmentController extends Controller
                 return $item;
             }
             if ($appointment->end_time >= $item->start_time && $appointment->end_time <= $item->end_time) {
+                return $item;
+            }
+        }
+        return false;
+    }
+
+    public function checkDuplicate(Appointment $appointment)
+    {
+        $appointments = DB::table('appointments')->where('user_id', $appointment->user_id)->get();
+        foreach ($appointments as $item) {
+            if ($appointment->start_time == $item->start_time && $appointment->end_time == $item->end_time && $appointment->name == $item->name) {
                 return $item;
             }
         }
@@ -63,18 +80,23 @@ class AppointmentController extends Controller
         $appointment->name = $input['name'];
         $appointment->user_id = $user->id;
         $appointment->location = $input['location'];
-        $appointment->start_time = Carbon::parse($input['start_time'])->format('Y-m-d H:i:s');
-        $appointment->end_time = Carbon::parse($input['end_time'])->format('Y-m-d H:i:s');
+        $appointment->start_time = Carbon::parse($input['start_time'])->setTimezone('Asia/Ho_Chi_Minh')->format('Y-m-d H:i:00');
+        $appointment->end_time = Carbon::parse($input['end_time'])->setTimezone('Asia/Ho_Chi_Minh')->format('Y-m-d H:i:00');
         $appointment->is_reminded = $input['is_reminded'];
         $appointment->is_group_meeting = $input['is_group_meeting'];
 
+        if ($item = $this->checkDuplicate($appointment)) {
+            return response()->json([
+                'message' => 'Duplicate appointment',
+                'appointment_id' => $item->id
+            ], 400);
+        }
         if ($item = $this->checkOverlapping($appointment)) {
             return response()->json([
                 'message' => 'Overlapping appointment',
                 'appointment_id' => $item->id
             ], 400);
-        }
-        else {
+        } else {
             $appointment->save();
         }
 
@@ -112,10 +134,10 @@ class AppointmentController extends Controller
         $appointment->name = $input['name'];
         $appointment->user_id = $user->id;
         $appointment->location = $input['location'];
-        $appointment->start_time = Carbon::parse($input['start_time'])->format('Y-m-d H:i:s');
-        $appointment->end_time = Carbon::parse($input['end_time'])->format('Y-m-d H:i:s');
+        $appointment->start_time = Carbon::parse($input['start_time'])->setTimezone('Asia/Ho_Chi_Minh')->format('Y-m-d H:i:00');
+        $appointment->end_time = Carbon::parse($input['end_time'])->setTimezone('Asia/Ho_Chi_Minh')->format('Y-m-d H:i:00');
         $appointment->is_reminded = $input['is_reminded'];
-        $appointment->is_group_meeting = $input['is_group_meeting'];    
+        $appointment->is_group_meeting = $input['is_group_meeting'];
         $appointment->save();
 
         return response()->json([

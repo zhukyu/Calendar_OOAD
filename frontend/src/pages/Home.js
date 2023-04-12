@@ -32,7 +32,6 @@ const Home = () => {
                 'Content-Type': 'application/json'
             }
         }).then((res => {
-            console.log(res);
             if (res.status === 401) {
                 localStorage.removeItem('access_token');
                 navigate('/');
@@ -58,7 +57,6 @@ const Home = () => {
                     'Content-Type': 'application/json'
                 }
             });
-            console.log(result.data.appointments);
             setData(result.data.appointments);
         };
 
@@ -123,13 +121,25 @@ const Home = () => {
             </div>
         ) : null;
     };
+
+    const handleCellClick = (item) => {
+        showReminder(item);
+    }
+
     const dateCellRender = (value) => {
         const listData = getListData(value);
         return (
             <ul className="events">
                 {listData.map((item, index) => (
-                    <li key={index}>
-                        <Badge status={'success'} text={item.name} />
+                    <li key={index} onClick={() => handleCellClick(item)}>
+                        <Badge color='#F5F3C1' text={item.name} 
+                        style={{
+                            backgroundColor: '#27E1C1',
+                            color: 'white',
+                            borderRadius: '5px',
+                            padding: '1px 5px'
+                        }}
+                        />
                     </li>
                 ))}
             </ul>
@@ -149,8 +159,17 @@ const Home = () => {
                     Add Appointment
                 </button>
                 <AddAppointment open={open} setOpen={setOpen} date={selectedDate} reload={reload} setReload={setReload} />
+                
+                <LocalizationProvider dateAdapter={AdapterDayjs}>
+                    <DateCalendar 
+                    showDaysOutsideCurrentMonth={true} 
+                    value={selectedDate} 
+                    onChange={(value) => { setSelectedDate(value) }} 
+                    />
+                </LocalizationProvider>
+
+                <h3>Reminder</h3>
                 <div className='reminder'>
-                    <h3>Reminder</h3>
                     <div className='reminder-list'>
                         {/* {data ? data.map((item, index) => {
                             if (item.usernames.find((item) => item.replace(/\"/g, "") === JSON.parse(localStorage.getItem('username')))) {
@@ -162,17 +181,20 @@ const Home = () => {
                                 )
                             };
                         }) : <></>} */}
+                        {data ? data.map((item, index) => {
+                            if (item.is_reminded === 1) {
+                                return (
+                                    <div className='reminder-item' key={index} onClick={() => showReminder(item)}>
+                                        <div className='reminder-item__name'>{item.name}</div>
+                                        <div className='reminder-item__date'>{item.start_time.substring(0, 16)}</div>
+                                    </div>
+                                )
+                            }
+                        }) : <></>}
                     </div>
 
                     <ReminderDetail open={reminderIsOpen} setOpen={setReminderIsOpen} data={reminderData} />
                 </div>
-                <LocalizationProvider dateAdapter={AdapterDayjs}>
-                    <DateCalendar 
-                    showDaysOutsideCurrentMonth={true} 
-                    value={selectedDate} 
-                    onChange={(value) => { setSelectedDate(value) }} 
-                    />
-                </LocalizationProvider>
             </div>
             <div className='calendar'>
                 <Calendar cellRender={cellRender} onChange={handleChange} onPanelChange={handlePanelChange} value={selectedDate}/>

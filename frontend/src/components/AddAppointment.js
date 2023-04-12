@@ -1,22 +1,75 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import Draggable from 'react-draggable';
 import './AddAppointment.scss'
-import { Modal, Button, Form, Input, InputNumber, TimePicker, Alert, message, DatePicker, Checkbox } from 'antd'
+import { Modal, Button, Form, Input, InputNumber, TimePicker, Alert, message, DatePicker, Checkbox, Select, Spin } from 'antd'
 import moment from 'moment';
 import { useNavigate } from 'react-router-dom';
 import Swal from 'sweetalert2'
 import dayjs from 'dayjs';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
 import axios from 'axios';
+import debounce from 'lodash/debounce';
 
 function AddAppointment(props) {
 
-    const [startTime, setStartTime] = useState(props.date.hour(dayjs().hour()).minute(dayjs().minute()))
+    const [startTime, setStartTime] = useState(props.date.hour(dayjs().hour()).minute(dayjs().minute()).second(0))
     const [endTime, setEndTime] = useState(props.date.hour(dayjs().hour()).minute(dayjs().minute()).add(30, 'minute'))
     const data = localStorage.getItem('data') ? JSON.parse(localStorage.getItem('data')) : []
     const navigate = useNavigate();
     const [remind, setRemind] = useState(false);
     const [isMeeting, setIsMeeting] = useState(false);
+
+    const [users, setUsers] = useState([]);
+
+    const [attendee, setAttendee] = useState([]);
+
+    const DebounceSelect = ({ fetchOptions, debounceTimeout = 800, ...props }) => {
+        const [fetching, setFetching] = useState(false);
+        const [options, setOptions] = useState([]);
+        const fetchRef = useRef(0);
+        const debounceFetcher = useMemo(() => {
+            const loadOptions = (value) => {
+                fetchRef.current += 1;
+                const fetchId = fetchRef.current;
+                setOptions([]);
+                setFetching(true);
+                fetchOptions(value).then((newOptions) => {
+                    if (fetchId !== fetchRef.current) {
+                        // for fetch callback order
+                        return;
+                    }
+                    setOptions(newOptions);
+                    setFetching(false);
+                });
+            };
+            return debounce(loadOptions, debounceTimeout);
+        }, [fetchOptions, debounceTimeout]);
+        return (
+            <Select
+                labelInValue
+                filterOption={false}
+                onSearch={debounceFetcher}
+                notFoundContent={fetching ? <Spin size="small" /> : null}
+                {...props}
+                options={options}
+            />
+        );
+    }
+
+    const fetchUserList = (username) => {
+        console.log('fetching user', username);
+        return axios(`http://127.0.0.1:8000/api/users/${username}`, {
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+                'Content-Type': 'application/json'
+            }
+        }).then((response) => {
+            return response.data.user.map((user) => ({
+                label: `${user.name}`,
+                value: user.id,
+            }))
+        });
+    }
 
     useEffect(() => {
         setStartTime(props.date.hour(dayjs().hour()).minute(dayjs().minute()))
@@ -74,121 +127,16 @@ function AddAppointment(props) {
         right: 0,
     });
     const draggleRef = useRef(null);
-    const times = data.map((item, index) => {
-        const date = item.date
-        const startTime = new Date(item.startTime)
-        const endTime = new Date(item.endTime)
-        return {
-            date: date,
-            startTime: startTime,
-            endTime: endTime
-        }
-    })
-    const [overlapIndex, setOverlapIndex] = useState(-1)
-
-    const checkTimeOverlap = (startTime, endTime) => {
-        const startTmp = new Date(startTime)
-        const endTmp = new Date(endTime)
-        for (let i = 0; i < times.length; i++) {
-            const element = times[i];
-            if (startTmp < element.endTime && endTmp > element.startTime && props.date === element.date) {
-                // message.error(`Time overlap`);
-                setOverlapIndex(i)
-                return true;
-            }
-        }
-        return false
-    }
-
-
-    const checkDuplicate = () => {
-        const appointmentName = form.getFieldValue('appointmentName')
-        const date = form.getFieldValue('date')
-        const startTime = new Date(form.getFieldValue('startTime'))
-        startTime.setMilliseconds(0)
-        const endTime = new Date(form.getFieldValue('endTime'))
-        endTime.setMilliseconds(0)
-        const data = localStorage.getItem('data') ? JSON.parse(localStorage.getItem('data')) : []
-        for (let i = 0; i < data.length; i++) {
-            const element = data[i];
-            const elementStartTime = new Date(element.startTime)
-            elementStartTime.setMilliseconds(0)
-            const elementEndTime = new Date(element.endTime)
-            elementEndTime.setMilliseconds(0)
-            if (element.appointmentName === appointmentName && element.date === date && elementStartTime.getTime() === startTime.getTime() && elementEndTime.getTime() === endTime.getTime()) {
-
-                return i
-            }
-        }
-
-        return -1
-    }
 
     const onFinish = async (values) => {
-        // const dupplicateIndex = checkDuplicate()
-        // if (dupplicateIndex !== -1) {
-        //     Swal.fire({
-        //         title: 'Appointment exist!',
-        //         text: "The appointment you entered has been alrealdy exist! Do you want to join the group meeting instead?",
-        //         icon: 'warning',
-        //         showCancelButton: true,
-        //         confirmButtonText: 'Join'
-        //     }).then((result) => {
-        //         if (result.isConfirmed) {
-        //             let newData = [...data]
-        //             if (!newData[dupplicateIndex].usernames.includes(localStorage.getItem('username'))) {
-        //                 newData[dupplicateIndex].usernames = [...newData[dupplicateIndex].usernames, localStorage.getItem('username')]
-        //                 localStorage.setItem('data', JSON.stringify(newData))
-        //             }
-        //             Swal.fire(
-        //                 'Hurray!',
-        //                 'You has been added to the group meeting!',
-        //                 'success'
-        //             ).then(() => {
-        //                 navigate(0)
-        //             })
-        //         }
-        //     })
-        // }
-        // else if (checkTimeOverlap(values.startTime, values.endTime)) {
-        //     Swal.fire({
-        //         title: 'Time overlapping?',
-        //         text: "Your already has an appointment at that time! Do you want to replace it?",
-        //         icon: 'warning',
-        //         showCancelButton: true,
-        //         cancelButtonText: 'Choose another time',
-        //         confirmButtonText: 'Replace'
-        //     }).then((result) => {
-        //         if (result.isConfirmed) {
-        //             let newData = [...data]
-        //             newData.splice(overlapIndex, 1, values)
-        //             localStorage.setItem('data', JSON.stringify(newData))
-        //             Swal.fire(
-        //                 'Replaced!',
-        //                 'Your appointment has been replaced.',
-        //                 'success'
-        //             ).then(() => {
-        //                 navigate(0)
-        //             })
-        //         }
-        //     })
-        // }
-        // else {
-        //     // console.log('Success:', values);
-        //     // message.success('Add appointment successfully')
-        //     let data = localStorage.getItem('data') ? JSON.parse(localStorage.getItem('data')) : []
 
-        //     const newData = [...data, values];
-        //     localStorage.setItem('data', JSON.stringify(newData))
-        //     props.setOpen(false);
-        //     Swal.fire(
-        //         'Created!',
-        //         'Your appointment has been created.',
-        //         'success'
-        //     ).then(() => {
-        //         navigate(0)
-        //     })
-        // }
+        let attendeeIDs = []
+        if (values.addPeople) {
+            attendeeIDs = values.addPeople.map((user) => user.value);
+        }
+
+        console.log(values);
+
         const formData = new FormData();
         formData.append('name', values.name);
         formData.append('location', values.location);
@@ -200,11 +148,11 @@ function AddAppointment(props) {
         else {
             formData.append('is_reminded', 0);
         }
-        if (isMeeting) {
-            formData.append('is_group_meeting', 1);
+        if (attendeeIDs.length === 0) {
+            formData.append('is_group_meeting', 0);
         }
         else {
-            formData.append('is_group_meeting', 0);
+            formData.append('is_group_meeting', 1);
         }
 
         const res = await axios.post('http://127.0.0.1:8000/api/auth/add-appointment', formData, {
@@ -213,14 +161,26 @@ function AddAppointment(props) {
                 'Content-Type': 'application/json'
             }
         }).then(res => {
-            console.log(res)
-            props.setOpen(false);
-            Swal.fire(
-                'Created!',
-                'Your appointment has been created.',
-                'success'
-            ).then(() => {
-                navigate(0)
+            const appointmentId = res.data.appointment.id
+            let sendData = {
+                appointment_id: appointmentId,
+                user_ids: attendeeIDs
+            }
+            axios.post('http://127.0.0.1:8000/api/auth/add-attendees', sendData, {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+                    'Content-Type': 'application/json'
+                }
+            }).then(res => {
+                console.log(res.data);
+                props.setOpen(false);
+                Swal.fire(
+                    'Created!',
+                    'Your appointment has been created.',
+                    'success'
+                ).then(() => {
+                    navigate(0)
+                })
             })
         }).catch(err => {
             if (err.response.data.message === 'Overlapping appointment') {
@@ -242,9 +202,56 @@ function AddAppointment(props) {
                             }
                         }).then(res => {
                             if (res.status === 200) {
+                                const appointmentId = res.data.appointment.id
+                                let sendData = {
+                                    appointment_id: appointmentId,
+                                    user_ids: attendeeIDs
+                                }
+                                axios.post('http://127.0.0.1:8000/api/auth/update-attendees', sendData, {
+                                    headers: {
+                                        'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+                                        'Content-Type': 'application/json'
+                                    }
+                                }).then(res => {
+                                    console.log(res.data);
+                                    props.setOpen(false);
+                                    Swal.fire(
+                                        'Replaced!',
+                                        'Your appointment has been replaced.',
+                                        'success'
+                                    ).then(() => {
+                                        navigate(0)
+                                    })
+                                })
+                            }
+                        })
+                    }
+                })
+            }
+            else if (err.response.data.message === 'Duplicate appointment') {
+                Swal.fire({
+                    title: 'Appointment exist!',
+                    text: "The appointment you entered has been alrealdy exist! Do you want to join the group meeting instead?",
+                    icon: 'warning',
+                    showCancelButton: true,
+                    confirmButtonText: 'Join'
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        const overlappingIndex = err.response.data.appointment_id
+                        const formData = new FormData();
+                        formData.append('appointment_id', overlappingIndex);
+                        const res = axios.post(`http://127.0.0.1:8000/api/auth/add-attendee`, formData, {
+                            headers: {
+                                'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
+                                'Content-Type': 'application/json'
+                            }
+                        }).then(res => {
+                            if (res.status === 200) {
+                                console.log(res.data);
+                                props.setOpen(false);
                                 Swal.fire(
-                                    'Replaced!',
-                                    'Your appointment has been replaced.',
+                                    'Joined!',
+                                    'You have joined the group meeting.',
                                     'success'
                                 ).then(() => {
                                     navigate(0)
@@ -310,12 +317,12 @@ function AddAppointment(props) {
 
     return (
         <div className='add-appointment'>
+
             <Modal
                 title={
                     <div
                         style={{
                             width: '100%',
-                            cursor: 'move',
                         }}
                         onMouseOver={() => {
                             if (disabled) {
@@ -337,15 +344,15 @@ function AddAppointment(props) {
                 open={props.open}
                 onOk={handleOk}
                 onCancel={handleCancel}
-                modalRender={(modal) => (
-                    <Draggable
-                        disabled={disabled}
-                        bounds={bounds}
-                        onStart={(event, uiData) => onStart(event, uiData)}
-                    >
-                        <div ref={draggleRef}>{modal}</div>
-                    </Draggable>
-                )}
+                // modalRender={(modal) => (
+                //     <Draggable
+                //         disabled={disabled}
+                //         bounds={bounds}
+                //         onStart={(event, uiData) => onStart(event, uiData)}
+                //     >
+                //         <div ref={draggleRef}>{modal}</div>
+                //     </Draggable>
+                // )}
                 footer={null}
             >
                 <Form
@@ -414,6 +421,23 @@ function AddAppointment(props) {
                                 defaultValue: dayjs('00:00', 'HH:mm'),
                             }}
                             onChange={(value) => { setEndTime(value) }}
+                        />
+                    </Form.Item>
+                    <Form.Item
+                        label="Add People"
+                        name='addPeople'
+                    >
+                        <DebounceSelect
+                            mode="multiple"
+                            value={attendee}
+                            placeholder="Select users"
+                            fetchOptions={fetchUserList}
+                            onChange={(newValue) => {
+                                setAttendee(newValue);
+                            }}
+                            style={{
+                                width: '100%',
+                            }}
                         />
                     </Form.Item>
                     <Form.Item

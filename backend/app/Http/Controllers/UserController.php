@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 
-class UsersController extends Controller
+class UserController extends Controller
 {
     /**
      * Create a new AuthController instance.
@@ -28,6 +28,11 @@ class UsersController extends Controller
     public function index()
     {
         $users = User::all();
+        return response()->json(['user' => $users,], 200);
+    }
+
+    public function find($str) {
+        $users = User::where('name', 'like', '%' . $str . '%')->get();
         return response()->json(['user' => $users,], 200);
     }
 
